@@ -33,6 +33,15 @@
       padding: 10px;
       border-radius: 5px;
     }
+    #vertical-controls {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: white;
+      background: rgba(0,0,0,0.5);
+      padding: 10px;
+      border-radius: 5px;
+    }
   </style>
 </head>
 <body>
@@ -43,6 +52,11 @@
     <p>Zoom: Roda do mouse</p>
     <p>Mover: Shift + Arraste</p>
   </div>
+  <div id="vertical-controls">
+    <button id="move-up">↑ Mover para Cima</button>
+    <button id="move-down">↓ Mover para Baixo</button>
+    <button id="reset-position">↻ Resetar Posição</button>
+  </div>
 
   <!-- Three.js e controles -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
@@ -50,6 +64,10 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
 
   <script>
+    // Variáveis globais
+    let skull = null;
+    const originalPosition = new THREE.Vector3();
+
     // Cena
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x222222);
@@ -81,19 +99,13 @@
     directionalLight2.position.set(-1, -1, -1);
     scene.add(directionalLight2);
 
-    // Eixos de referência (opcional)
-    const axesHelper = new THREE.AxesHelper(5);
-    scene.add(axesHelper);
-
     // Carregador OBJ
     const loader = new THREE.OBJLoader();
     loader.load(
       'cranio.obj',
       function (object) {
-        // Remove mensagem de carregamento
         document.getElementById('loading').style.display = 'none';
         
-        // Ajusta o material do modelo
         const material = new THREE.MeshPhongMaterial({
           color: 0xcccccc,
           specular: 0x111111,
@@ -104,35 +116,63 @@
         object.traverse(function (child) {
           if (child.isMesh) {
             child.material = material;
-            child.castShadow = true;
-            child.receiveShadow = true;
           }
         });
 
-        // Centraliza o modelo
+        // Centraliza e armazena posição original
         const box = new THREE.Box3().setFromObject(object);
         const center = box.getCenter(new THREE.Vector3());
         object.position.sub(center);
+        originalPosition.copy(object.position);
         
-        // Ajusta o tamanho da câmera
         const size = box.getSize(new THREE.Vector3()).length();
         camera.position.z = size * 1.5;
         controls.target.copy(center);
         controls.update();
 
         scene.add(object);
+        skull = object; // Armazena referência global
         console.log('Modelo carregado com sucesso:', object);
       },
       function (xhr) {
-        const percentComplete = (xhr.loaded / xhr.total * 100);
-        document.getElementById('loading').textContent = `Carregando... ${percentComplete.toFixed(2)}%`;
-        console.log(percentComplete + '% carregado');
+        document.getElementById('loading').textContent = `Carregando... ${(xhr.loaded / xhr.total * 100).toFixed(2)}%`;
       },
       function (error) {
         document.getElementById('loading').textContent = 'Erro ao carregar o modelo!';
         console.error('Erro ao carregar o modelo:', error);
       }
     );
+
+    // Controles de movimento vertical
+    document.getElementById('move-up').addEventListener('click', () => {
+      if (skull) skull.position.y += 0.5;
+    });
+
+    document.getElementById('move-down').addEventListener('click', () => {
+      if (skull) skull.position.y -= 0.5;
+    });
+
+    document.getElementById('reset-position').addEventListener('click', () => {
+      if (skull) skull.position.copy(originalPosition);
+    });
+
+    // Também podemos adicionar controles de teclado
+    document.addEventListener('keydown', (event) => {
+      if (!skull) return;
+      
+      switch(event.key) {
+        case 'ArrowUp':
+          skull.position.y += 0.5;
+          break;
+        case 'ArrowDown':
+          skull.position.y -= 0.5;
+          break;
+        case 'r':
+        case 'R':
+          skull.position.copy(originalPosition);
+          break;
+      }
+    });
 
     // Animação
     function animate() {
@@ -147,13 +187,6 @@
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-
-    // Debug: tecla 'A' mostra/oculta eixos
-    document.addEventListener('keydown', (event) => {
-      if (event.key.toLowerCase() === 'a') {
-        axesHelper.visible = !axesHelper.visible;
-      }
     });
   </script>
 </body>
