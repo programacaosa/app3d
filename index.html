@@ -18,6 +18,7 @@
 <body>
   <div id="container"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/loaders/OBJLoader.min.js"></script>
   <script>
     // Carregar o modelo 3D
     const scene = new THREE.Scene();
@@ -26,6 +27,7 @@
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.getElementById('container').appendChild(renderer.domElement);
 
+    // Agora o OBJLoader está disponível
     const loader = new THREE.OBJLoader();
     loader.load('cranio.obj', function(object) {
       scene.add(object);
