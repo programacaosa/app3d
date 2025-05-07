@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Visualizador de Crânio 3D</title>
+  <title>Crânio 3D - Controle Completo</title>
   <style>
     body { 
       margin: 0;
@@ -33,7 +33,7 @@
       padding: 10px;
       border-radius: 5px;
     }
-    #vertical-controls {
+    #mode-controls {
       position: absolute;
       top: 20px;
       left: 20px;
@@ -50,23 +50,25 @@
   <div id="controls">
     <p>Rotacionar: Arraste com o mouse</p>
     <p>Zoom: Roda do mouse</p>
-    <p>Mover: Shift + Arraste</p>
+    <p>Mover Câmera: Shift + Arraste</p>
   </div>
-  <div id="vertical-controls">
-    <button id="move-up">↑ Mover para Cima</button>
-    <button id="move-down">↓ Mover para Baixo</button>
-    <button id="reset-position">↻ Resetar Posição</button>
+  <div id="mode-controls">
+    <button id="rotate-mode">Modo Rotação</button>
+    <button id="move-mode">Modo Movimento</button>
   </div>
 
   <!-- Three.js e controles -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
 
   <script>
     // Variáveis globais
     let skull = null;
-    const originalPosition = new THREE.Vector3();
+    let transformControls;
+    let orbitControls;
+    let isMoveMode = false;
 
     // Cena
     const scene = new THREE.Scene();
@@ -82,11 +84,6 @@
     renderer.setPixelRatio(window.devicePixelRatio);
     document.getElementById('container').appendChild(renderer.domElement);
 
-    // Controles de órbita
-    const controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-
     // Luzes
     const ambientLight = new THREE.AmbientLight(0x404040);
     scene.add(ambientLight);
@@ -98,6 +95,19 @@
     const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
     directionalLight2.position.set(-1, -1, -1);
     scene.add(directionalLight2);
+
+    // Controles de órbita
+    orbitControls = new THREE.OrbitControls(camera, renderer.domElement);
+    orbitControls.enableDamping = true;
+    orbitControls.dampingFactor = 0.05;
+
+    // Controles de transformação
+    transformControls = new THREE.TransformControls(camera, renderer.domElement);
+    transformControls.setMode('translate');
+    transformControls.addEventListener('dragging-changed', function (event) {
+      orbitControls.enabled = !event.value;
+    });
+    scene.add(transformControls);
 
     // Carregador OBJ
     const loader = new THREE.OBJLoader();
@@ -119,19 +129,19 @@
           }
         });
 
-        // Centraliza e armazena posição original
+        // Centraliza o modelo
         const box = new THREE.Box3().setFromObject(object);
         const center = box.getCenter(new THREE.Vector3());
         object.position.sub(center);
-        originalPosition.copy(object.position);
         
         const size = box.getSize(new THREE.Vector3()).length();
         camera.position.z = size * 1.5;
-        controls.target.copy(center);
-        controls.update();
+        orbitControls.target.copy(center);
+        orbitControls.update();
 
         scene.add(object);
-        skull = object; // Armazena referência global
+        skull = object;
+        transformControls.attach(skull);
         console.log('Modelo carregado com sucesso:', object);
       },
       function (xhr) {
@@ -143,41 +153,44 @@
       }
     );
 
-    // Controles de movimento vertical
-    document.getElementById('move-up').addEventListener('click', () => {
-      if (skull) skull.position.y += 0.5;
+    // Controles de modo
+    document.getElementById('rotate-mode').addEventListener('click', () => {
+      isMoveMode = false;
+      transformControls.detach();
+      orbitControls.enabled = true;
+      transformControls.enabled = false;
+      updateModeButtons();
     });
 
-    document.getElementById('move-down').addEventListener('click', () => {
-      if (skull) skull.position.y -= 0.5;
+    document.getElementById('move-mode').addEventListener('click', () => {
+      if (!skull) return;
+      isMoveMode = true;
+      transformControls.attach(skull);
+      transformControls.enabled = true;
+      orbitControls.enabled = false;
+      updateModeButtons();
     });
 
-    document.getElementById('reset-position').addEventListener('click', () => {
-      if (skull) skull.position.copy(originalPosition);
-    });
+    function updateModeButtons() {
+      document.getElementById('rotate-mode').style.backgroundColor = isMoveMode ? '' : '#4CAF50';
+      document.getElementById('move-mode').style.backgroundColor = isMoveMode ? '#4CAF50' : '';
+    }
 
-    // Também podemos adicionar controles de teclado
+    // Teclas de atalho (R para rotação, M para movimento)
     document.addEventListener('keydown', (event) => {
       if (!skull) return;
       
-      switch(event.key) {
-        case 'ArrowUp':
-          skull.position.y += 0.5;
-          break;
-        case 'ArrowDown':
-          skull.position.y -= 0.5;
-          break;
-        case 'r':
-        case 'R':
-          skull.position.copy(originalPosition);
-          break;
+      if (event.key.toLowerCase() === 'r') {
+        document.getElementById('rotate-mode').click();
+      } else if (event.key.toLowerCase() === 'm') {
+        document.getElementById('move-mode').click();
       }
     });
 
     // Animação
     function animate() {
       requestAnimationFrame(animate);
-      controls.update();
+      orbitControls.update();
       renderer.render(scene, camera);
     }
     animate();
@@ -188,6 +201,9 @@
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
+
+    // Inicializa botões
+    updateModeButtons();
   </script>
 </body>
 </html>
