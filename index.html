@@ -3,12 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Crânio 3D - Controle Completo</title>
+  <title>Visualizador de Crânio 3D</title>
   <style>
     body { 
       margin: 0;
       overflow: hidden;
       font-family: Arial, sans-serif;
+      color: white;
     }
     #container {
       width: 100vw;
@@ -19,42 +20,140 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      color: white;
       background: rgba(0,0,0,0.7);
       padding: 20px;
       border-radius: 5px;
+      z-index: 100;
     }
     #controls {
       position: absolute;
       bottom: 20px;
       left: 20px;
-      color: white;
       background: rgba(0,0,0,0.5);
       padding: 10px;
       border-radius: 5px;
+      max-width: 300px;
     }
     #mode-controls {
       position: absolute;
       top: 20px;
       left: 20px;
-      color: white;
       background: rgba(0,0,0,0.5);
       padding: 10px;
       border-radius: 5px;
+    }
+    #parts-controls {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(0,0,0,0.5);
+      padding: 10px;
+      border-radius: 5px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    button {
+      cursor: pointer;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 4px;
+      background: #333;
+      color: white;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    button:hover {
+      background: #444;
+    }
+    .active {
+      background: #4CAF50;
+    }
+    .active:hover {
+      background: #5fbf63;
+    }
+    .control-group {
+      margin-bottom: 10px;
+    }
+    .control-group h3 {
+      margin: 0 0 5px 0;
+      font-size: 14px;
+    }
+    .progress-bar {
+      width: 100%;
+      background: #333;
+      border-radius: 4px;
+      margin-top: 5px;
+    }
+    .progress {
+      height: 5px;
+      background: #4CAF50;
+      border-radius: 4px;
+      width: 0%;
+      transition: width 0.3s;
+    }
+    @media (max-width: 768px) {
+      #controls, #mode-controls, #parts-controls {
+        font-size: 12px;
+        padding: 8px;
+      }
+      button {
+        padding: 6px 10px;
+      }
     }
   </style>
 </head>
 <body>
   <div id="container"></div>
-  <div id="loading">Carregando modelo 3D...</div>
-  <div id="controls">
-    <p>Rotacionar: Arraste com o mouse</p>
-    <p>Zoom: Roda do mouse</p>
-    <p>Mover Câmera: Shift + Arraste</p>
+  
+  <div id="loading">
+    <div>Carregando modelos 3D...</div>
+    <div class="progress-bar">
+      <div class="progress" id="load-progress"></div>
+    </div>
   </div>
+  
   <div id="mode-controls">
-    <button id="rotate-mode">Modo Rotação</button>
-    <button id="move-mode">Modo Movimento</button>
+    <div class="control-group">
+      <h3>Modo de Controle</h3>
+      <button id="rotate-mode">
+        <span>🔄</span> Modo Rotação
+      </button>
+      <button id="move-mode">
+        <span>✥</span> Modo Movimento
+      </button>
+    </div>
+  </div>
+  
+  <div id="parts-controls">
+    <h3>Partes do Modelo</h3>
+    <button id="toggle-eyes">
+      <span>👁️</span> Mostrar Olhos
+    </button>
+    <button id="toggle-teeth">
+      <span>🦷</span> Mostrar Dentes
+    </button>
+    <!-- Adicione mais botões para outras partes aqui -->
+  </div>
+  
+  <div id="controls">
+    <div class="control-group">
+      <h3>Controles</h3>
+      <p>🖱️ Rotacionar: Arraste com o mouse</p>
+      <p>🔍 Zoom: Roda do mouse</p>
+      <p>✥ Mover Câmera: Shift + Arraste</p>
+    </div>
+    <div class="control-group">
+      <h3>Atalhos</h3>
+      <p>R: Modo Rotação</p>
+      <p>M: Modo Movimento</p>
+      <p>E: Mostrar/Ocultar Olhos</p>
+      <p>T: Mostrar/Ocultar Dentes</p>
+    </div>
   </div>
 
   <!-- Three.js e controles -->
@@ -66,9 +165,34 @@
   <script>
     // Variáveis globais
     let skull = null;
+    let eyes = null;
+    let teeth = null;
     let transformControls;
     let orbitControls;
     let isMoveMode = false;
+    let modelsToLoad = 0;
+    let modelsLoaded = 0;
+    
+    // Configuração de materiais
+    const materials = {
+      skull: new THREE.MeshPhongMaterial({
+        color: 0xcccccc,
+        specular: 0x111111,
+        shininess: 30,
+        side: THREE.DoubleSide
+      }),
+      eyes: new THREE.MeshPhongMaterial({
+        color: 0xffffff,
+        specular: 0x111111,
+        shininess: 50,
+        emissive: 0x222222
+      }),
+      teeth: new THREE.MeshPhongMaterial({
+        color: 0xfffff0,
+        specular: 0xffffff,
+        shininess: 100
+      })
+    };
 
     // Cena
     const scene = new THREE.Scene();
@@ -79,9 +203,13 @@
     camera.position.z = 5;
 
     // Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ 
+      antialias: true,
+      alpha: true
+    });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.shadowMap.enabled = true;
     document.getElementById('container').appendChild(renderer.domElement);
 
     // Luzes
@@ -90,6 +218,7 @@
 
     const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight1.position.set(1, 1, 1);
+    directionalLight1.castShadow = true;
     scene.add(directionalLight1);
 
     const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
@@ -111,47 +240,97 @@
 
     // Carregador OBJ
     const loader = new THREE.OBJLoader();
-    loader.load(
-      'cranio.obj',
-      function (object) {
-        document.getElementById('loading').style.display = 'none';
-        
-        const material = new THREE.MeshPhongMaterial({
-          color: 0xcccccc,
-          specular: 0x111111,
-          shininess: 30,
-          side: THREE.DoubleSide
-        });
 
-        object.traverse(function (child) {
-          if (child.isMesh) {
-            child.material = material;
+    // Função para carregar modelos
+    function loadModel(url, name, material, onLoaded) {
+      modelsToLoad++;
+      updateLoadProgress();
+      
+      loader.load(
+        url,
+        (object) => {
+          setupModel(object, name, material);
+          onLoaded(object);
+          modelsLoaded++;
+          updateLoadProgress();
+          
+          if (modelsLoaded === modelsToLoad) {
+            document.getElementById('loading').style.display = 'none';
           }
-        });
+        },
+        (xhr) => {
+          const percent = (xhr.loaded / xhr.total * 100);
+          console.log(`${name} ${percent.toFixed(2)}% carregado`);
+        },
+        (error) => {
+          console.error(`Erro ao carregar ${name}:`, error);
+          modelsLoaded++;
+          updateLoadProgress();
+        }
+      );
+    }
 
-        // Centraliza o modelo
-        const box = new THREE.Box3().setFromObject(object);
-        const center = box.getCenter(new THREE.Vector3());
-        object.position.sub(center);
-        
-        const size = box.getSize(new THREE.Vector3()).length();
-        camera.position.z = size * 1.5;
-        orbitControls.target.copy(center);
-        orbitControls.update();
+    // Atualiza barra de progresso
+    function updateLoadProgress() {
+      const progress = (modelsLoaded / modelsToLoad) * 100;
+      document.getElementById('load-progress').style.width = `${progress}%`;
+    }
 
-        scene.add(object);
+    // Configurar modelo carregado
+    function setupModel(model, name, material) {
+      const box = new THREE.Box3().setFromObject(model);
+      const center = box.getCenter(new THREE.Vector3());
+      model.position.sub(center);
+      
+      model.traverse((child) => {
+        if (child.isMesh) {
+          child.material = material;
+          child.castShadow = true;
+          child.receiveShadow = true;
+          child.userData.name = name;
+        }
+      });
+      
+      return model;
+    }
+
+    // Centralizar câmera no modelo
+    function centerCameraOnModel(model) {
+      const box = new THREE.Box3().setFromObject(model);
+      const size = box.getSize(new THREE.Vector3()).length();
+      const center = box.getCenter(new THREE.Vector3());
+      
+      camera.position.z = size * 1.5;
+      orbitControls.target.copy(center);
+      orbitControls.update();
+    }
+
+    // Carregar todos os modelos
+    function loadAllModels() {
+      // Crânio principal
+      loadModel('cranio.obj', 'skull', materials.skull, (object) => {
         skull = object;
+        scene.add(skull);
         transformControls.attach(skull);
-        console.log('Modelo carregado com sucesso:', object);
-      },
-      function (xhr) {
-        document.getElementById('loading').textContent = `Carregando... ${(xhr.loaded / xhr.total * 100).toFixed(2)}%`;
-      },
-      function (error) {
-        document.getElementById('loading').textContent = 'Erro ao carregar o modelo!';
-        console.error('Erro ao carregar o modelo:', error);
-      }
-    );
+        centerCameraOnModel(skull);
+      });
+      
+      // Olhos
+      loadModel('olhos.obj', 'eyes', materials.eyes, (object) => {
+        eyes = object;
+        eyes.visible = false;
+        scene.add(eyes);
+      });
+      
+      // Dentes
+      loadModel('dentes.obj', 'teeth', materials.teeth, (object) => {
+        teeth = object;
+        teeth.visible = false;
+        scene.add(teeth);
+      });
+      
+      // Adicione mais modelos conforme necessário
+    }
 
     // Controles de modo
     document.getElementById('rotate-mode').addEventListener('click', () => {
@@ -172,18 +351,40 @@
     });
 
     function updateModeButtons() {
-      document.getElementById('rotate-mode').style.backgroundColor = isMoveMode ? '' : '#4CAF50';
-      document.getElementById('move-mode').style.backgroundColor = isMoveMode ? '#4CAF50' : '';
+      document.getElementById('rotate-mode').classList.toggle('active', !isMoveMode);
+      document.getElementById('move-mode').classList.toggle('active', isMoveMode);
     }
 
-    // Teclas de atalho (R para rotação, M para movimento)
+    // Controle de partes
+    document.getElementById('toggle-eyes').addEventListener('click', () => {
+      if (!eyes) return;
+      eyes.visible = !eyes.visible;
+      document.getElementById('toggle-eyes').classList.toggle('active', eyes.visible);
+      document.getElementById('toggle-eyes').innerHTML = 
+        eyes.visible ? '<span>👁️</span> Ocultar Olhos' : '<span>👁️</span> Mostrar Olhos';
+    });
+
+    document.getElementById('toggle-teeth').addEventListener('click', () => {
+      if (!teeth) return;
+      teeth.visible = !teeth.visible;
+      document.getElementById('toggle-teeth').classList.toggle('active', teeth.visible);
+      document.getElementById('toggle-teeth').innerHTML = 
+        teeth.visible ? '<span>🦷</span> Ocultar Dentes' : '<span>🦷</span> Mostrar Dentes';
+    });
+
+    // Teclas de atalho
     document.addEventListener('keydown', (event) => {
       if (!skull) return;
       
-      if (event.key.toLowerCase() === 'r') {
+      const key = event.key.toLowerCase();
+      if (key === 'r') {
         document.getElementById('rotate-mode').click();
-      } else if (event.key.toLowerCase() === 'm') {
+      } else if (key === 'm') {
         document.getElementById('move-mode').click();
+      } else if (key === 'e' && eyes) {
+        document.getElementById('toggle-eyes').click();
+      } else if (key === 't' && teeth) {
+        document.getElementById('toggle-teeth').click();
       }
     });
 
@@ -202,7 +403,8 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
-    // Inicializa botões
+    // Inicialização
+    loadAllModels();
     updateModeButtons();
   </script>
 </body>
